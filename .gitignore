@@ -22,3 +22,4 @@ data/
 output/
 tmp/
 *.ics
+.vercel
