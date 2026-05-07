@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Life OS MVP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <script defer src="/assets/app.js"></script>
+  </head>
+  <body>
+    <div class="backdrop-glow glow-a"></div>
+    <div class="backdrop-glow glow-b"></div>
+    <div class="grid-noise"></div>
+
+    <main class="shell">
+      <div id="demoBanner" class="demo-banner" hidden>
+        <strong>Public Demo / Read-only</strong>
+        <span>這是公開展示版。新增、刪除、Apple Calendar 同步與資料寫入已停用。</span>
+      </div>
+
+      <header class="masthead reveal">
+        <div class="masthead-copy">
+          <div class="eyebrow-row">
+            <p class="eyebrow">LIFE OPS BOARD</p>
+            <p class="eyebrow eyebrow-soft">DESKTOP MODE</p>
+          </div>
+
+          <div class="brand-block">
+            <div class="brand-copy">
+              <h1>Life OS</h1>
+              <p id="heroTheme" class="hero-theme">載入中...</p>
+            </div>
+
+            <div class="brand-rule">
+              <p class="eyebrow">OPERATING RULE</p>
+              <strong>先處理硬期限，再把長期主線往前推。</strong>
+            </div>
+          </div>
+
+          <div id="snapshotGrid" class="snapshot-strip"></div>
+        </div>
+
+        <aside class="command-panel">
+          <div class="command-head">
+            <p class="ops-label">CONTROL DECK</p>
+            <h2>同步、重排、落地</h2>
+            <p class="command-copy">Apple Calendar、每週重排和狀態回報都集中在這裡。</p>
+          </div>
+
+          <label class="field-inline">
+            Apple Calendar
+            <select id="calendarSelect"></select>
+          </label>
+
+          <div class="command-actions">
+            <button id="importCalendarButton" class="ghost-btn" type="button">匯入近期行程</button>
+            <button id="replanButton" class="primary-btn" type="button">重排本週</button>
+          </div>
+
+          <p id="statusLine" class="status-line">系統準備中</p>
+        </aside>
+      </header>
+
+      <section class="workspace">
+        <div class="main-column">
+          <section class="section-panel panel reveal">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Direction</p>
+                <h2>人生主線</h2>
+              </div>
+            </div>
+            <div id="goalGrid" class="goal-grid"></div>
+          </section>
+
+          <section class="section-panel panel reveal">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Focus</p>
+                <h2>今天與本週</h2>
+              </div>
+            </div>
+
+            <div class="focus-summary">
+              <p id="todaySummary" class="today-summary">分析中...</p>
+            </div>
+
+            <div class="focus-split">
+              <div class="focus-lane">
+                <div class="lane-head">
+                  <p class="eyebrow">TODAY TASKS</p>
+                  <h3>今天要處理</h3>
+                </div>
+                <div id="todayTaskList" class="mini-list"></div>
+              </div>
+
+              <div class="focus-lane">
+                <div class="lane-head">
+                  <p class="eyebrow">TODAY EVENTS</p>
+                  <h3>今天已排</h3>
+                </div>
+                <div id="todayEventList" class="mini-list"></div>
+              </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="section-head section-head-compact">
+              <div>
+                <p class="section-kicker">Execution</p>
+                <h2>本週焦點任務</h2>
+              </div>
+            </div>
+            <div id="taskList" class="task-list"></div>
+          </section>
+
+          <section class="section-panel panel reveal">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Cashflow</p>
+                <h2>現金流工作台</h2>
+              </div>
+            </div>
+            <p class="helper-text">把實際收支、未來規劃款項和資產快照分開記，才看得出你缺的是現金流、時間，還是只是資產卡住。</p>
+
+            <div id="cashflowSummaryGrid" class="cashflow-summary-grid"></div>
+
+            <div class="cashflow-focus-grid">
+              <div class="cashflow-lane">
+                <div class="lane-head">
+                  <p class="eyebrow">NEXT 30 DAYS</p>
+                  <h3>未來款項</h3>
+                </div>
+                <div id="cashflowUpcomingList" class="mini-list"></div>
+              </div>
+
+              <div class="cashflow-lane">
+                <div class="lane-head">
+                  <p class="eyebrow">ASSETS</p>
+                  <h3>資產快照</h3>
+                </div>
+                <div id="cashflowAssetList" class="mini-list"></div>
+              </div>
+
+              <div class="cashflow-lane">
+                <div class="lane-head">
+                  <p class="eyebrow">THIS MONTH</p>
+                  <h3>月度分類</h3>
+                </div>
+                <div id="cashflowCategoryList" class="category-list"></div>
+              </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="section-head section-head-compact">
+              <div>
+                <p class="section-kicker">Ledger</p>
+                <h2>現金流流水帳</h2>
+              </div>
+            </div>
+            <div id="cashflowLedger" class="cashflow-ledger"></div>
+          </section>
+
+          <section class="section-panel panel reveal">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Projects</p>
+                <h2>專案與缺口</h2>
+              </div>
+            </div>
+            <div id="projectGrid" class="project-grid"></div>
+          </section>
+        </div>
+
+        <aside class="side-column">
+          <aside class="ops-card reveal">
+            <p class="ops-label">OPS EMPLOYEE</p>
+            <h2 id="employeeHeadline">分析中</h2>
+            <p id="employeeSummary" class="ops-summary"></p>
+            <ul id="employeeActions" class="action-list"></ul>
+          </aside>
+
+          <section class="section-panel panel reveal">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Calendar</p>
+                <h2>近期事件</h2>
+              </div>
+            </div>
+            <p class="helper-text">事件支援寫回 Apple Calendar；匯入與重排在上方 Control Deck。</p>
+            <div id="eventList" class="event-list"></div>
+          </section>
+
+          <section class="section-panel panel reveal">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Risk Center</p>
+                <h2>衝突與風險</h2>
+              </div>
+            </div>
+            <div id="conflictList" class="conflict-list"></div>
+          </section>
+
+          <section class="section-panel panel reveal">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Planner</p>
+                <h2>重排本週</h2>
+              </div>
+            </div>
+            <div id="replanView" class="replan-view"></div>
+          </section>
+
+          <section class="section-panel panel reveal">
+            <div class="section-head">
+              <div>
+                <p class="section-kicker">Action Lab</p>
+                <h2>快速新增</h2>
+              </div>
+            </div>
+
+            <div class="control-tabs">
+              <button class="tab-btn is-active" data-pane-button="capture" type="button">Capture</button>
+              <button class="tab-btn" data-pane-button="task" type="button">Task</button>
+              <button class="tab-btn" data-pane-button="event" type="button">Event</button>
+              <button class="tab-btn" data-pane-button="cashflow" type="button">Cashflow</button>
+            </div>
+
+            <div class="form-wrap">
+              <form id="captureForm" class="stack-form control-pane is-active" data-pane="capture">
+                <h3>Quick Capture</h3>
+                <label>
+                  一次貼多行
+                  <textarea
+                    id="captureText"
+                    name="text"
+                    rows="6"
+                    placeholder="4/3 19:00-21:00 專注工作練習&#10;截止 4/1 20:00 確認行政文件證件&#10;整理seasonal work履歷"
+                    required
+                  ></textarea>
+                </label>
+                <p class="helper-text">有日期時間會優先轉成事件；沒有日期的內容會先當任務。</p>
+                <button type="submit" class="primary-btn">快速匯入</button>
+              </form>
+
+              <form id="taskForm" class="stack-form control-pane" data-pane="task">
+                <h3>新增任務</h3>
+                <label>
+                  任務名稱
+                  <input id="taskTitle" name="title" type="text" placeholder="例如：確認 4/2 文件證件" required />
+                </label>
+                <label>
+                  關聯專案
+                  <select id="taskProject" name="project_id"></select>
+                </label>
+                <label>
+                  截止時間
+                  <input id="taskDueAt" name="due_at" type="datetime-local" />
+                </label>
+                <div class="form-row">
+                  <label>
+                    優先級
+                    <select id="taskPriority" name="priority">
+                      <option value="critical">critical</option>
+                      <option value="high" selected>high</option>
+                      <option value="medium">medium</option>
+                      <option value="low">low</option>
+                    </select>
+                  </label>
+                  <label>
+                    預估分鐘
+                    <input id="taskEstimate" name="estimate_minutes" type="number" min="15" step="15" value="60" />
+                  </label>
+                </div>
+                <label class="checkbox-row">
+                  <input id="taskBlocking" name="blocking" type="checkbox" />
+                  這是阻塞型前置任務
+                </label>
+                <button type="submit" class="primary-btn">加入任務</button>
+              </form>
+
+              <form id="eventForm" class="stack-form control-pane" data-pane="event">
+                <h3>新增事件</h3>
+                <label>
+                  事件名稱
+                  <input id="eventTitle" name="title" type="text" placeholder="例如：專注工作路考模擬" required />
+                </label>
+                <label>
+                  關聯專案
+                  <select id="eventProject" name="project_id"></select>
+                </label>
+                <div class="form-row">
+                  <label>
+                    開始
+                    <input id="eventStartAt" name="start_at" type="datetime-local" required />
+                  </label>
+                  <label>
+                    結束
+                    <input id="eventEndAt" name="end_at" type="datetime-local" required />
+                  </label>
+                </div>
+                <label>
+                  地點
+                  <input id="eventLocation" name="location" type="text" placeholder="可留空" />
+                </label>
+                <p class="helper-text">事件新增後，可以在近期事件區直接同步到上方選定的 Apple Calendar。</p>
+                <button type="submit" class="secondary-btn">加入事件</button>
+              </form>
+
+              <form id="cashflowForm" class="stack-form control-pane" data-pane="cashflow">
+                <h3>新增現金流</h3>
+                <label>
+                  名稱
+                  <input id="cashflowTitle" name="title" type="text" placeholder="例如：Part-time收入 / Demo Trip機票" required />
+                </label>
+                <div class="form-row">
+                  <label>
+                    類型
+                    <select id="cashflowKind" name="kind">
+                      <option value="income">income</option>
+                      <option value="expense" selected>expense</option>
+                      <option value="asset">asset</option>
+                    </select>
+                  </label>
+                  <label>
+                    狀態
+                    <select id="cashflowStatus" name="status">
+                      <option value="actual" selected>actual</option>
+                      <option value="planned">planned</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label>
+                    金額
+                    <input id="cashflowAmount" name="amount" type="number" min="1" step="1" placeholder="1200" required />
+                  </label>
+                  <label>
+                    日期
+                    <input id="cashflowDate" name="date" type="date" required />
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label>
+                    分類
+                    <input id="cashflowCategory" name="category" type="text" placeholder="例如：Part-time / 飲食 / 旅遊 / 投資" required />
+                  </label>
+                  <label>
+                    帳戶
+                    <input id="cashflowAccount" name="account" type="text" placeholder="例如：現金 / Demo Bank" />
+                  </label>
+                </div>
+                <label>
+                  關聯專案
+                  <select id="cashflowProject" name="project_id"></select>
+                </label>
+                <label>
+                  備註
+                  <textarea id="cashflowNote" name="note" rows="3" placeholder="可填款項來源、是否必要、付款方式"></textarea>
+                </label>
+                <p class="helper-text">`planned` 會進未來 30 天預測；`asset` 會進資產快照，不混入月收支。</p>
+                <button type="submit" class="primary-btn">加入現金流</button>
+              </form>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

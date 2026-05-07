@@ -1,0 +1,96 @@
+name: LifeOS
+options:
+  bundleIdPrefix: local.codex
+  deploymentTarget:
+    macOS: 14.0
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    GENERATE_INFOPLIST_FILE: NO
+packages: {}
+targets:
+  LifeOSCore:
+    type: framework
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Sources/LifeOSCore
+    info:
+      path: Config/LifeOSCore-Info.plist
+      properties:
+        CFBundleIdentifier: local.codex.lifeos.core
+        CFBundleName: LifeOSCore
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+    settings:
+      base:
+        PRODUCT_NAME: LifeOSCore
+        PRODUCT_BUNDLE_IDENTIFIER: local.codex.lifeos.core
+        DEFINES_MODULE: YES
+        PRODUCT_MODULE_NAME: LifeOSCore
+  LifeOS:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Sources/LifeOS
+    info:
+      path: Config/LifeOS-Info.plist
+      properties:
+        CFBundleIdentifier: local.codex.lifeos
+        CFBundleName: LifeOS
+        CFBundleDisplayName: Life OS
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "14.0"
+        NSPrincipalClass: NSApplication
+        NSHighResolutionCapable: true
+    dependencies:
+      - target: LifeOSCore
+    settings:
+      base:
+        PRODUCT_NAME: LifeOS
+        PRODUCT_BUNDLE_IDENTIFIER: local.codex.lifeos
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+  LifeOSCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Tests/LifeOSCoreTests
+    dependencies:
+      - target: LifeOSCore
+    settings:
+      base:
+        PRODUCT_NAME: LifeOSCoreTests
+        PRODUCT_BUNDLE_IDENTIFIER: local.codex.lifeos.tests
+        GENERATE_INFOPLIST_FILE: YES
+  LifeOSUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Tests/LifeOSUITests
+    dependencies:
+      - target: LifeOS
+    settings:
+      base:
+        PRODUCT_NAME: LifeOSUITests
+        PRODUCT_BUNDLE_IDENTIFIER: local.codex.lifeos.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  LifeOS:
+    build:
+      targets:
+        LifeOS: all
+        LifeOSCore: [test]
+        LifeOSCoreTests: [test]
+        LifeOSUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - LifeOSCoreTests
