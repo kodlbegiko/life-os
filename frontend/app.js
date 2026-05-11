@@ -1,1076 +1,516 @@
-const heroTheme = document.getElementById("heroTheme");
-const snapshotGrid = document.getElementById("snapshotGrid");
-const todaySummary = document.getElementById("todaySummary");
-const todayTaskList = document.getElementById("todayTaskList");
-const todayEventList = document.getElementById("todayEventList");
-const employeeHeadline = document.getElementById("employeeHeadline");
-const employeeSummary = document.getElementById("employeeSummary");
-const employeeActions = document.getElementById("employeeActions");
-const goalGrid = document.getElementById("goalGrid");
-const taskList = document.getElementById("taskList");
-const cashflowSummaryGrid = document.getElementById("cashflowSummaryGrid");
-const cashflowUpcomingList = document.getElementById("cashflowUpcomingList");
-const cashflowAssetList = document.getElementById("cashflowAssetList");
-const cashflowCategoryList = document.getElementById("cashflowCategoryList");
-const cashflowLedger = document.getElementById("cashflowLedger");
-const projectGrid = document.getElementById("projectGrid");
-const eventList = document.getElementById("eventList");
-const conflictList = document.getElementById("conflictList");
-const replanView = document.getElementById("replanView");
-const captureForm = document.getElementById("captureForm");
-const taskForm = document.getElementById("taskForm");
-const eventForm = document.getElementById("eventForm");
-const cashflowForm = document.getElementById("cashflowForm");
-const taskProject = document.getElementById("taskProject");
-const eventProject = document.getElementById("eventProject");
-const cashflowProject = document.getElementById("cashflowProject");
-const calendarSelect = document.getElementById("calendarSelect");
-const importCalendarButton = document.getElementById("importCalendarButton");
-const replanButton = document.getElementById("replanButton");
-const statusLine = document.getElementById("statusLine");
+const navItems = [
+  { id: "overview", label: "總覽", icon: "▦" },
+  { id: "ledger", label: "記帳", icon: "▤" },
+  { id: "planned", label: "預計收支", icon: "▣" },
+  { id: "assets", label: "資產", icon: "⌁" },
+  { id: "tasks", label: "任務", icon: "☷" },
+  { id: "calendar", label: "行事曆", icon: "▦" },
+  { id: "goals", label: "目標", icon: "◆" },
+  { id: "projects", label: "專案", icon: "▰" },
+  { id: "settings", label: "設定", icon: "⚙" },
+];
+
+const state = {
+  section: "overview",
+  dashboard: null,
+  replan: null,
+  selected: null,
+  search: "",
+};
+
+const sidebarNav = document.getElementById("sidebarNav");
+const workspace = document.getElementById("workspace");
+const inspector = document.getElementById("inspector");
 const demoBanner = document.getElementById("demoBanner");
-const paneButtons = Array.from(document.querySelectorAll("[data-pane-button]"));
-const panes = Array.from(document.querySelectorAll("[data-pane]"));
+const searchInput = document.getElementById("workspaceSearch");
 
-const priorityClass = {
-  critical: "priority-critical",
-  high: "priority-high",
-  medium: "priority-medium",
-  low: "priority-low",
-};
-
-const cashflowKindClass = {
-  income: "pill-good",
-  expense: "pill-alert",
-  asset: "priority-high",
-};
-
-let dashboard = null;
-let appMode = { publicDemo: false, readOnly: false };
-
-function setStatus(message, tone = "neutral") {
-  statusLine.textContent = message;
-  statusLine.dataset.tone = tone;
+function escapeHTML(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
-function badge(label, className = "") {
-  return `<span class="pill ${className}">${label}</span>`;
-}
-
-function formatDateTime(value, allDay = false) {
-  const date = new Date(value);
-  if (allDay) {
-    return new Intl.DateTimeFormat("zh-TW", {
-      month: "numeric",
-      day: "numeric",
-      weekday: "short",
-    }).format(date);
-  }
-
+function formatDate(value) {
+  if (!value) return "未設定";
+  const date = new Date(value.includes("T") ? value : `${value}T00:00:00`);
   return new Intl.DateTimeFormat("zh-TW", {
+    year: "numeric",
     month: "numeric",
     day: "numeric",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
   }).format(date);
 }
 
-function formatTimeOnly(value) {
+function formatDateTime(value) {
+  if (!value) return "未設定";
   return new Intl.DateTimeFormat("zh-TW", {
+    month: "numeric",
+    day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
 }
 
-function formatDateOnly(value) {
-  if (!value) {
-    return "未設定";
-  }
-  const [year, month, day] = value.split("-");
-  return `${year}/${month}/${day}`;
-}
-
-function formatDayLabel(value) {
-  const date = new Date(`${value}T00:00`);
-  return new Intl.DateTimeFormat("zh-TW", {
-    month: "numeric",
-    day: "numeric",
-    weekday: "short",
-  }).format(date);
-}
-
-function formatCurrency(value) {
-  const absolute = new Intl.NumberFormat("zh-TW", {
+function formatCurrency(value = 0) {
+  return new Intl.NumberFormat("zh-TW", {
     style: "currency",
     currency: "TWD",
     maximumFractionDigits: 0,
-  }).format(Math.abs(value));
-
-  return value < 0 ? `-${absolute}` : absolute;
+  }).format(value);
 }
 
-function formatSignedAmount(entry) {
-  if (entry.kind === "income") {
-    return `+${formatCurrency(entry.amount)}`;
-  }
-  if (entry.kind === "expense") {
-    return `-${formatCurrency(entry.amount)}`;
-  }
-  return formatCurrency(entry.amount);
+function projectName(projectId) {
+  return state.dashboard?.projects?.find((project) => project.id === projectId)?.title || "未指定專案";
 }
 
-function netToneClass(amount) {
-  if (amount > 0) {
-    return "is-positive";
-  }
-  if (amount < 0) {
-    return "is-negative";
-  }
-  return "is-neutral";
+function allTasks() {
+  return state.dashboard?.tasks || [];
 }
 
-function dueLabel(task) {
-  if (!task.due_at) {
-    return "未設定截止時間";
-  }
-  return `截止 ${formatDateTime(task.due_at)}`;
+function allEvents() {
+  return state.dashboard?.events || [];
 }
 
-function eventWindowLabel(event) {
-  if (event.all_day) {
-    return "全天事件";
-  }
-
-  const sameDay = event.start_at.slice(0, 10) === event.end_at.slice(0, 10);
-  if (sameDay) {
-    return `${formatDateTime(event.start_at)} - ${formatTimeOnly(event.end_at)}`;
-  }
-  return `${formatDateTime(event.start_at)} - ${formatDateTime(event.end_at)}`;
+function filtered(items, fields = ["title"]) {
+  const term = state.search.trim().toLowerCase();
+  if (!term) return items;
+  return items.filter((item) => fields.some((field) => String(item[field] || "").toLowerCase().includes(term)));
 }
 
-function projectNameFor(projectId) {
-  if (!projectId || !dashboard) {
-    return "未指定專案";
-  }
-  const project = dashboard.projects.find((item) => item.id === projectId);
-  return project ? project.title : "未指定專案";
+function priorityLabel(priority) {
+  const map = { critical: "最高", high: "高", medium: "中", low: "低" };
+  return map[priority] || priority || "未設定";
 }
 
-function setActivePane(paneName) {
-  paneButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.paneButton === paneName);
-  });
-  panes.forEach((pane) => {
-    pane.classList.toggle("is-active", pane.dataset.pane === paneName);
-  });
+function severityChip(value) {
+  if (["critical", "high"].includes(value)) return "red";
+  if (value === "medium") return "blue";
+  return "green";
 }
 
-function fillProjectSelects(projects) {
-  const options = [`<option value="">未指定</option>`]
-    .concat(projects.map((project) => `<option value="${project.id}">${project.title}</option>`))
-    .join("");
-
-  taskProject.innerHTML = options;
-  eventProject.innerHTML = options;
-  cashflowProject.innerHTML = options;
-}
-
-function fillCalendarSelect(list) {
-  if (!list.length) {
-    calendarSelect.innerHTML = `<option value="">找不到可用行事曆</option>`;
-    calendarSelect.disabled = true;
-    importCalendarButton.disabled = true;
-    return;
-  }
-
-  const preferred = list.includes("計劃安排") ? "計劃安排" : list[0];
-  calendarSelect.innerHTML = list
-    .map((calendar) => `<option value="${calendar}">${calendar}</option>`)
-    .join("");
-  calendarSelect.disabled = false;
-  importCalendarButton.disabled = false;
-  calendarSelect.value = preferred;
-}
-
-function applyAppMode(mode = {}) {
-  appMode = {
-    publicDemo: Boolean(mode.publicDemo),
-    readOnly: Boolean(mode.readOnly),
-  };
-  document.body.classList.toggle("is-read-only", appMode.readOnly);
-
-  if (demoBanner) {
-    demoBanner.hidden = !appMode.publicDemo;
-  }
-
-  importCalendarButton.disabled = appMode.readOnly;
-  calendarSelect.disabled = appMode.readOnly;
-
-  document.querySelectorAll("form input, form textarea, form select, form button").forEach((element) => {
-    element.disabled = appMode.readOnly;
-  });
-
-  document
-    .querySelectorAll(
-      [
-        "[data-task-id]",
-        "[data-task-delete-id]",
-        "[data-requirement-id]",
-        "[data-event-sync-id]",
-        "[data-event-delete-id]",
-        "[data-cashflow-id]",
-        "[data-cashflow-delete-id]",
-      ].join(",")
-    )
-    .forEach((element) => {
-      element.disabled = appMode.readOnly;
-      element.title = appMode.readOnly ? "Public demo is read-only." : "";
-    });
-}
-
-function renderSnapshot(snapshot) {
-  const items = [
-    ["主線目標", snapshot.active_goals],
-    ["未完成任務", snapshot.open_tasks],
-    ["卡住專案", snapshot.blocked_projects],
-    ["近期事件", snapshot.upcoming_events],
-  ];
-
-  snapshotGrid.innerHTML = items
-    .map(
-      ([label, value]) => `
-        <article class="snap-card">
-          <p>${label}</p>
-          <strong>${value}</strong>
-        </article>
-      `
-    )
-    .join("");
-}
-
-function renderToday(today) {
-  todaySummary.textContent = today.summary;
-
-  todayTaskList.innerHTML = today.tasks.length
-    ? today.tasks
-        .map(
-          (task) => `
-            <article class="mini-card">
-              <strong>${task.title}</strong>
-              <span>${projectNameFor(task.project_id)} · ${task.due_at ? dueLabel(task) : `預估 ${task.estimate_minutes} 分鐘`}</span>
-            </article>
-          `
-        )
-        .join("")
-    : `<p class="empty-state">今天沒有硬期限任務。</p>`;
-
-  todayEventList.innerHTML = today.events.length
-    ? today.events
-        .map(
-          (event) => `
-            <article class="mini-card">
-              <strong>${event.title}</strong>
-              <span>${eventWindowLabel(event)}</span>
-            </article>
-          `
-        )
-        .join("")
-    : `<p class="empty-state">今天沒有排定事件。</p>`;
-}
-
-function renderEmployee(brief) {
-  employeeHeadline.textContent = brief.headline;
-  employeeSummary.textContent = brief.summary;
-  employeeActions.innerHTML = brief.actions
-    .map(
-      (action) => `
-        <li>
-          <strong>${action.title}</strong>
-          <span>${action.reason}</span>
-        </li>
-      `
-    )
-    .join("");
-}
-
-function renderGoals(goals) {
-  goalGrid.innerHTML = goals
-    .map(
-      (goal) => `
-        <article class="goal-card">
-          <div class="goal-copy">
-            <div class="goal-meta">
-              ${badge(goal.horizon)}
-              ${badge(goal.priority, priorityClass[goal.priority])}
-              ${goal.status ? badge(goal.status) : ""}
-            </div>
-            <h3>${goal.title}</h3>
-            <p>${goal.why}</p>
-          </div>
-          <div class="goal-footer">
-            <span>完成定義</span>
-            <strong>${goal.success_definition}</strong>
-            <span>目標日期 ${formatDateOnly(goal.target_date)}</span>
-          </div>
-        </article>
-      `
-    )
-    .join("");
-}
-
-function renderTasks(tasks) {
-  if (!tasks.length) {
-    taskList.innerHTML = `<p class="empty-state">目前沒有待處理任務。</p>`;
-    return;
-  }
-
-  taskList.innerHTML = tasks
-    .map(
-      (task) => `
-        <article class="task-card ${task.status === "done" ? "is-done" : ""}">
-          <div class="task-main">
-            <div class="task-top">
-              ${badge(task.priority, priorityClass[task.priority])}
-              ${task.blocking ? badge("blocking", "pill-alert") : ""}
-              ${badge(task.status)}
-            </div>
-            <h3>${task.title}</h3>
-            <p>${projectNameFor(task.project_id)} · ${dueLabel(task)} · 預估 ${task.estimate_minutes} 分鐘</p>
-          </div>
-          <div class="task-actions">
-            <button
-              class="ghost-btn"
-              data-task-id="${task.id}"
-              data-next-status="${task.status === "done" ? "todo" : "done"}"
-            >
-              ${task.status === "done" ? "重新打開" : "標記完成"}
-            </button>
-            <button class="ghost-btn danger-btn" data-task-delete-id="${task.id}">刪除</button>
-          </div>
-        </article>
-      `
-    )
-    .join("");
-}
-
-function requirementActionButton(requirement) {
-  if (requirement.status === "met") {
-    return `
-      <button class="tiny-btn" data-requirement-id="${requirement.id}" data-next-status="in_progress">
-        改成進行中
-      </button>
-    `;
-  }
-
-  return `
-    <button class="tiny-btn" data-requirement-id="${requirement.id}" data-next-status="met">
-      標記 met
-    </button>
-  `;
-}
-
-function renderProjects(projects) {
-  projectGrid.innerHTML = projects
-    .map((project) => {
-      const metCount = project.requirements.filter((item) => item.status === "met").length;
-      return `
-        <article class="project-card">
-          <div class="project-top">
-            <div class="project-head">
-              <div class="project-side">
-                ${badge(project.stage)}
-                ${badge(project.priority, priorityClass[project.priority])}
-                ${badge(project.risk, project.risk === "stable" ? "pill-good" : "pill-alert")}
-              </div>
-              <h3>${project.title}</h3>
-              <p class="project-summary">${project.summary}</p>
-            </div>
-            <div class="project-score">
-              <strong>${project.readiness}%</strong>
-              <span>readiness</span>
-            </div>
-          </div>
-
-          <div class="project-meter">
-            <span style="width:${project.readiness}%"></span>
-          </div>
-
-          <div class="project-meta-row">
-            <span>${metCount}/${project.requirements.length} requirements met</span>
-            <strong>Deadline ${formatDateOnly(project.deadline)}</strong>
-          </div>
-
-          <div class="project-gap-row">
-            <span>Next gap</span>
-            <strong>${project.next_gap}</strong>
-          </div>
-
-          <div class="requirement-list">
-            ${project.requirements
-              .map(
-                (requirement) => `
-                  <div class="requirement-item">
-                    <div>
-                      <strong>${requirement.title}</strong>
-                      <p>${requirement.note || "無補充說明"}</p>
-                    </div>
-                    <div class="requirement-actions">
-                      ${badge(requirement.status, requirement.status === "met" ? "pill-good" : "pill-alert")}
-                      ${requirementActionButton(requirement)}
-                    </div>
-                  </div>
-                `
-              )
-              .join("")}
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-}
-
-function renderCashflow(cashflow) {
-  const summary = cashflow.summary;
-  const summaryCards = [
-    {
-      label: `${summary.month_label} 收入`,
-      value: formatCurrency(summary.month_income),
-      note: "本月已入帳",
-      tone: "is-positive",
-    },
-    {
-      label: `${summary.month_label} 支出`,
-      value: formatCurrency(summary.month_expense),
-      note: "本月已花出",
-      tone: "is-negative",
-    },
-    {
-      label: `${summary.month_label} 淨流`,
-      value: formatCurrency(summary.month_net),
-      note: "收入減支出",
-      tone: netToneClass(summary.month_net),
-    },
-    {
-      label: "未來 30 天", 
-      value: formatCurrency(summary.planned_net_30d),
-      note: `收入 ${formatCurrency(summary.planned_income_30d)} / 支出 ${formatCurrency(summary.planned_expense_30d)}`,
-      tone: netToneClass(summary.planned_net_30d),
-    },
-    {
-      label: "資產快照",
-      value: formatCurrency(summary.asset_total),
-      note: `${summary.entry_count} 筆現金流紀錄`,
-      tone: "is-neutral",
-    },
-  ];
-
-  cashflowSummaryGrid.innerHTML = summaryCards
+function renderNav() {
+  sidebarNav.innerHTML = navItems
     .map(
       (item) => `
-        <article class="cashflow-stat ${item.tone}">
-          <p>${item.label}</p>
-          <strong>${item.value}</strong>
-          <span>${item.note}</span>
-        </article>
-      `
-    )
-    .join("");
-
-  cashflowUpcomingList.innerHTML = cashflow.upcoming.length
-    ? cashflow.upcoming
-        .map(
-          (entry) => `
-            <article class="mini-card">
-              <strong>${entry.title}</strong>
-              <span>${formatDateOnly(entry.date)} · ${entry.category} · ${entry.kind}</span>
-              <span class="cashflow-inline ${entry.kind === "income" ? "is-income" : "is-expense"}">${formatSignedAmount(entry)}</span>
-            </article>
-          `
-        )
-        .join("")
-    : `<p class="empty-state">未來 30 天沒有已規劃款項。</p>`;
-
-  cashflowAssetList.innerHTML = cashflow.asset_positions.length
-    ? cashflow.asset_positions
-        .map(
-          (entry) => `
-            <article class="mini-card">
-              <strong>${entry.title}</strong>
-              <span>${entry.category}${entry.account ? ` · ${entry.account}` : ""}</span>
-              <span class="cashflow-inline is-asset">${formatCurrency(entry.amount)}</span>
-            </article>
-          `
-        )
-        .join("")
-    : `<p class="empty-state">還沒有資產快照。</p>`;
-
-  if (!cashflow.category_breakdown.length) {
-    cashflowCategoryList.innerHTML = `<p class="empty-state">本月還沒有足夠的實際收支分類。</p>`;
-  } else {
-    const maxTotal = Math.max(...cashflow.category_breakdown.map((item) => item.total), 1);
-    cashflowCategoryList.innerHTML = cashflow.category_breakdown
-      .map(
-        (item) => `
-          <article class="category-row">
-            <div class="category-copy">
-              <div class="task-top">
-                ${badge(item.kind, cashflowKindClass[item.kind])}
-                <strong>${item.category}</strong>
-              </div>
-              <div class="category-meter">
-                <span style="width:${Math.max(16, Math.round((item.total / maxTotal) * 100))}%"></span>
-              </div>
-            </div>
-            <strong>${formatCurrency(item.total)}</strong>
-          </article>
-        `
-      )
-      .join("");
-  }
-
-  cashflowLedger.innerHTML = cashflow.recent.length
-    ? cashflow.recent
-        .map(
-          (entry) => `
-            <article class="ledger-row">
-              <div class="ledger-date-block">
-                <p class="eyebrow">${formatDateOnly(entry.date)}</p>
-              </div>
-              <div class="ledger-main">
-                <div class="task-top">
-                  ${badge(entry.kind, cashflowKindClass[entry.kind])}
-                  ${badge(entry.status, entry.status === "actual" ? "pill-good" : "priority-low")}
-                  ${entry.project_id ? badge(projectNameFor(entry.project_id)) : ""}
-                </div>
-                <h3>${entry.title}</h3>
-                <p>${entry.category}${entry.account ? ` · ${entry.account}` : ""}${entry.note ? ` · ${entry.note}` : ""}</p>
-              </div>
-              <div class="ledger-side">
-                <strong class="ledger-amount ${entry.kind === "income" ? "is-income" : entry.kind === "expense" ? "is-expense" : "is-asset"}">${formatSignedAmount(entry)}</strong>
-                <div class="event-actions">
-                  <button class="tiny-btn" data-cashflow-id="${entry.id}" data-cashflow-next-status="${entry.status === "actual" ? "planned" : "actual"}">
-                    ${entry.status === "actual" ? "改成 planned" : "標成 actual"}
-                  </button>
-                  <button class="tiny-btn danger-btn" data-cashflow-delete-id="${entry.id}">刪除</button>
-                </div>
-              </div>
-            </article>
-          `
-        )
-        .join("")
-    : `<p class="empty-state">目前還沒有現金流紀錄。</p>`;
-}
-
-function renderEvents(events) {
-  if (!events.length) {
-    eventList.innerHTML = `<p class="empty-state">目前沒有近期事件。</p>`;
-    return;
-  }
-
-  eventList.innerHTML = events
-    .map(
-      (event) => `
-        <article class="event-card">
-          <div class="event-date">${event.all_day ? formatDateTime(event.start_at, true) : formatTimeOnly(event.start_at)}</div>
-          <div class="event-body">
-            <h3>${event.title}</h3>
-            <p>${projectNameFor(event.project_id)} · ${eventWindowLabel(event)}</p>
-            <span>${event.location || event.notes || "未填地點/備註"}</span>
-            <div class="event-actions">
-              ${
-                event.apple_uid
-                  ? `<span class="synced-note">已同步到 Apple Calendar${event.apple_calendar ? ` · ${event.apple_calendar}` : ""}</span>`
-                  : `<button class="tiny-btn" data-event-sync-id="${event.id}">同步到 Apple Calendar</button>`
-              }
-              <button class="tiny-btn danger-btn" data-event-delete-id="${event.id}">刪除</button>
-            </div>
-          </div>
-        </article>
-      `
+        <button class="nav-item ${state.section === item.id ? "is-active" : ""}" type="button" data-nav="${item.id}">
+          <span class="nav-icon">${item.icon}</span>
+          <span>${item.label}</span>
+        </button>
+      `,
     )
     .join("");
 }
 
-function renderConflicts(conflicts) {
-  if (!conflicts.length) {
-    conflictList.innerHTML = `<p class="empty-state">目前沒有顯著衝突。</p>`;
-    return;
-  }
-
-  conflictList.innerHTML = conflicts
-    .map(
-      (conflict) => `
-        <article class="conflict-card">
-          <div class="conflict-top">
-            ${badge(conflict.kind)}
-            ${badge(conflict.severity, "pill-alert")}
-          </div>
-          <h3>${conflict.title}</h3>
-          <p>${conflict.detail}</p>
-          <strong>${conflict.action}</strong>
-        </article>
-      `
-    )
-    .join("");
-}
-
-function renderReplan(plan) {
-  if (!plan) {
-    replanView.innerHTML = `<p class="empty-state">尚未產生本週重排建議。</p>`;
-    return;
-  }
-
-  replanView.innerHTML = `
-    <div class="replan-summary">
-      <p>${plan.summary}</p>
-    </div>
-
-    <div class="replan-block">
-      <h3>本週必做</h3>
-      <div class="mini-list">
-        ${
-          plan.must_do.length
-            ? plan.must_do
-                .map(
-                  (item) => `
-                    <article class="mini-card">
-                      <strong>${item.title}</strong>
-                      <span>${item.reason}${item.due_at ? ` · ${formatDateTime(item.due_at)}` : ""}</span>
-                    </article>
-                  `
-                )
-                .join("")
-            : `<p class="empty-state">本週沒有明顯硬截止的任務。</p>`
-        }
-      </div>
-    </div>
-
-    <div class="replan-days">
-      ${plan.plan_days
-        .map(
-          (day) => `
-            <article class="day-card">
-              <div class="day-top">
-                <strong>${formatDayLabel(day.date)}</strong>
-                <span>${day.headline}</span>
-              </div>
-              <div class="mini-list">
-                ${
-                  day.items.length
-                    ? day.items
-                        .map(
-                          (item) => `
-                            <article class="mini-card">
-                              <strong>${item.title}</strong>
-                              <span>${item.kind} · ${item.time}</span>
-                            </article>
-                          `
-                        )
-                        .join("")
-                    : `<p class="empty-state">留白日</p>`
-                }
-              </div>
-            </article>
-          `
-        )
-        .join("")}
-    </div>
+function pageHeading(title, subtitle) {
+  return `
+    <header class="page-heading">
+      <h1>${escapeHTML(title)}</h1>
+      <p>${escapeHTML(subtitle)}</p>
+    </header>
   `;
 }
 
-function renderAll(data) {
-  dashboard = data;
-  heroTheme.textContent = data.profile.life_theme;
-  renderSnapshot(data.snapshot);
-  renderToday(data.today);
-  renderEmployee(data.employee_brief);
-  renderGoals(data.goals);
-  renderTasks(data.tasks);
-  renderCashflow(data.cashflow);
-  renderProjects(data.projects);
-  renderEvents(data.events);
-  renderConflicts(data.conflicts);
-  fillProjectSelects(data.projects);
-  applyAppMode(data.app_mode);
-  document.body.classList.add("is-ready");
+function taskCard(task, options = {}) {
+  const cls = task.priority === "critical" ? "is-critical" : task.priority === "high" ? "is-high" : "";
+  return `
+    <article class="task-card ${cls}" data-select="task" data-id="${escapeHTML(task.id || task.title)}">
+      <p class="task-title">${escapeHTML(task.title)}</p>
+      <div class="meta-line">
+        <span>專案 ${escapeHTML(projectName(task.project_id))}</span>
+        <span>截止 ${escapeHTML(formatDateTime(task.due_at))}</span>
+        <span>優先級 ${escapeHTML(priorityLabel(task.priority))}</span>
+        ${task.estimate_minutes ? `<span>${task.estimate_minutes} 分鐘</span>` : ""}
+      </div>
+      <div class="card-actions">
+        <button class="card-button" type="button" data-select-button="task" data-id="${escapeHTML(task.id || task.title)}">開啟任務</button>
+        <button class="card-button" type="button" data-write-action disabled>完成</button>
+        <button class="card-button" type="button" data-write-action disabled>建立時間區塊</button>
+        ${options.showUnschedule ? `<button class="card-button" type="button" data-write-action disabled>解除排程</button>` : ""}
+      </div>
+    </article>
+  `;
 }
 
-async function fetchJSON(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
+function planItemCard(item, index) {
+  return `
+    <article class="task-card" data-select="plan" data-id="${index}">
+      <p class="task-title">${escapeHTML(item.title || "未命名任務")}</p>
+      <div class="meta-line">
+        <span>${escapeHTML(item.time || "未排時間")}</span>
+        <span>${escapeHTML(item.kind || "task")}</span>
+      </div>
+      <div class="card-actions">
+        <button class="card-button" type="button" data-select-button="plan" data-id="${index}">開啟任務</button>
+        <button class="card-button" type="button" data-write-action disabled>完成</button>
+        <button class="card-button" type="button" data-write-action disabled>建立時間區塊</button>
+        <button class="card-button" type="button" data-write-action disabled>解除排程</button>
+      </div>
+    </article>
+  `;
+}
+
+function rowCard(item, kind, meta = []) {
+  return `
+    <article class="row-card" data-select="${kind}" data-id="${escapeHTML(item.id || item.title)}">
+      <p class="row-title">${escapeHTML(item.title || "未命名")}</p>
+      <div class="meta-line">${meta.map((entry) => `<span>${escapeHTML(entry)}</span>`).join("")}</div>
+    </article>
+  `;
+}
+
+function computeQuality() {
+  const days = state.replan?.plan_days || [];
+  const taskDates = new Map();
+  days.forEach((day) => {
+    (day.items || []).forEach((item) => {
+      const dates = taskDates.get(item.title) || [];
+      dates.push(day.date);
+      taskDates.set(item.title, dates);
+    });
   });
-
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || `HTTP ${response.status}`);
-  }
-
-  if (response.status === 204) {
-    return null;
-  }
-
-  return response.json();
+  const repeated = [...taskDates.values()].filter((dates) => dates.length > 1).length;
+  const needsTime = (state.replan?.must_do || []).length;
+  const riskDays = days.filter((day) => (day.items || []).length >= 2).length;
+  const timeBlocks = allEvents().length;
+  return { repeated, needsTime, riskDays, timeBlocks };
 }
 
-function setCashflowDateDefault() {
-  const input = document.getElementById("cashflowDate");
-  if (!input.value) {
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    input.value = `${now.getFullYear()}-${month}-${day}`;
+function renderOverview() {
+  const dashboard = state.dashboard;
+  const replan = state.replan;
+  const todayTasks = filtered(dashboard.today?.tasks || [], ["title", "priority"]);
+  const todayEvents = filtered(dashboard.today?.events || [], ["title"]);
+  const conflicts = filtered(dashboard.conflicts || [], ["title", "detail", "action"]);
+  const quality = computeQuality();
+  const days = replan?.plan_days || [];
+
+  workspace.innerHTML = `
+    ${pageHeading("今日作戰中心", "查看今天必做、時間區塊、截止風險與未來 7 天推進。")}
+
+    <section class="panel panel-muted week-draft">
+      <div>
+        <div class="section-title">
+          <span class="section-symbol">▣</span>
+          <h2>本週作戰草案</h2>
+        </div>
+        <p class="section-copy">產生可編輯的 7 天草案，每天最多 3 個均衡焦點。公開展示版不會寫入資料。</p>
+        <p class="section-copy">${escapeHTML(replan?.summary || "使用「產生本週計畫」預覽橫跨比賽、賺錢、旅遊、投資與長期工作的均衡安排。")}</p>
+      </div>
+      <div class="action-row">
+        <button id="generatePlanButton" class="action-button" type="button">產生本週計畫</button>
+        <button class="action-button" type="button" disabled>全選</button>
+        <button class="action-button" type="button" disabled>清除選取</button>
+        <button class="action-button primary" type="button" data-write-action disabled>套用已選</button>
+        <button class="action-button" type="button">關閉草案</button>
+      </div>
+    </section>
+
+    <section class="summary-grid">
+      <article class="panel summary-card">
+        <div class="section-title"><span class="section-symbol">◎</span><h2 class="card-title">今日必做</h2></div>
+        <strong class="summary-count">共 ${todayTasks.length} 項焦點</strong>
+        ${todayTasks.length ? todayTasks.slice(0, 3).map((task) => `<p class="muted-text">${escapeHTML(task.title)}</p>`).join("") : `<p class="empty-note">今天還沒有焦點任務。</p>`}
+      </article>
+      <article class="panel summary-card">
+        <div class="section-title"><span class="section-symbol">◴</span><h2 class="card-title">今日時間區塊</h2></div>
+        <strong class="summary-count">時間區塊 ${todayEvents.length}</strong>
+        ${todayEvents.length ? todayEvents.map((event) => `<p class="muted-text">${escapeHTML(event.title)}</p>`).join("") : `<p class="empty-note">今天沒有時間區塊。</p>`}
+      </article>
+      <article class="panel summary-card">
+        <div class="section-title"><span class="section-symbol">▲</span><h2 class="card-title">截止風險</h2></div>
+        <strong class="summary-count">風險 ${conflicts.length}</strong>
+        ${conflicts.length ? conflicts.slice(0, 2).map((item) => `<p class="muted-text">${escapeHTML(item.title)}</p>`).join("") : `<p class="empty-note">未來 7 天沒有高風險截止日。</p>`}
+      </article>
+    </section>
+
+    <section class="panel quality-panel">
+      <div class="quality-top">
+        <div>
+          <div class="section-title"><span class="section-symbol">✿</span><h2>排程品質</h2></div>
+          <p class="section-copy">重複安排仍然有效，這裡只標示需要注意的地方。</p>
+        </div>
+        <div class="chip-row">
+          <span class="chip">重複 ${quality.repeated}</span>
+          <span class="chip">需補時段 ${quality.needsTime}</span>
+          <span class="chip green">風險日 ${quality.riskDays}</span>
+        </div>
+      </div>
+      <p class="muted-text">${quality.needsTime ? "重要焦點建議補上同日時間區塊，否則容易只停留在待辦清單。" : "排程品質目前看起來可執行。"}</p>
+    </section>
+
+    <section class="panel board-panel">
+      <div class="board-head">
+        <div>
+          <div class="section-title"><span class="section-symbol">☷</span><h2>7 天排程板</h2></div>
+          <p class="section-copy">水平捲動可查看完整 7 天</p>
+        </div>
+        <p class="muted-text">把任務拖到這裡，或使用每張卡片上的按鈕。</p>
+      </div>
+      <div class="board-scroll">
+        <div class="day-track">
+          ${days
+            .map((day, dayIndex) => {
+              const items = day.items || [];
+              return `
+                <section class="day-column">
+                  <h3>${escapeHTML(formatDate(day.date))}</h3>
+                  <div class="chip-row">
+                    <span class="chip blue">共 ${items.length} 項焦點</span>
+                    <span class="chip green">已顯示全部項目</span>
+                  </div>
+                  <div class="day-separator"></div>
+                  <div class="chip-row">
+                    <span class="chip">重複 0</span>
+                    <span class="chip">需補時段 ${items.length}</span>
+                    <span class="chip">已排時段 0</span>
+                    <span class="chip">風險 ${items.length ? 1 : 0}</span>
+                  </div>
+                  ${items.length ? items.map((item, itemIndex) => planItemCard(item, `${dayIndex}-${itemIndex}`)).join("") : `<p class="empty-note">把任務拖到這裡</p>`}
+                </section>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderTasks() {
+  const tasks = filtered(allTasks(), ["title", "priority", "project_id"]);
+  workspace.innerHTML = `
+    ${pageHeading("任務", "管理待辦、優先級、截止日與專案連結。")}
+    <section class="panel list-panel">
+      ${tasks.length ? tasks.map((task) => taskCard(task, { showUnschedule: true })).join("") : `<p class="empty-note">目前沒有任務。</p>`}
+    </section>
+  `;
+}
+
+function renderProjects() {
+  const projects = filtered(state.dashboard.projects || [], ["title", "summary", "priority"]);
+  workspace.innerHTML = `
+    ${pageHeading("專案", "查看每條工作線的 readiness、deadline 與下一個缺口。")}
+    <section class="data-grid">
+      ${projects
+        .map((project) => rowCard(project, "project", [
+          `Readiness ${project.readiness ?? 0}%`,
+          `Deadline ${formatDate(project.deadline)}`,
+          `Open tasks ${project.open_tasks ?? 0}`,
+          `Risk ${project.risk || "normal"}`,
+        ]))
+        .join("")}
+    </section>
+  `;
+}
+
+function renderGoals() {
+  const goals = filtered(state.dashboard.goals || [], ["title", "why", "priority"]);
+  workspace.innerHTML = `
+    ${pageHeading("目標", "長期方向、成功定義與目前優先順序。")}
+    <section class="data-grid">
+      ${goals.map((goal) => rowCard(goal, "goal", [`${goal.horizon || "未設定"}`, `Target ${formatDate(goal.target_date)}`, `Priority ${priorityLabel(goal.priority)}`])).join("")}
+    </section>
+  `;
+}
+
+function renderCalendar() {
+  const events = filtered(allEvents(), ["title", "location"]);
+  workspace.innerHTML = `
+    ${pageHeading("行事曆", "本機 Life OS 事件與時間區塊。")}
+    <section class="panel list-panel">
+      ${events.length ? events.map((event) => rowCard(event, "event", [`${formatDateTime(event.start_at)}`, event.location || "無地點"])).join("") : `<p class="empty-note">目前沒有事件。公開展示版不連 Apple Calendar。</p>`}
+    </section>
+  `;
+}
+
+function renderCashflow(kind) {
+  const cashflow = state.dashboard.cashflow || {};
+  const summary = cashflow.summary || {};
+  const recent = cashflow.recent || [];
+  const upcoming = cashflow.upcoming || [];
+  const assets = cashflow.asset_positions || [];
+  const pageMap = {
+    ledger: ["記帳", "實際收入、支出與最近流水帳。"],
+    planned: ["預計收支", "未來 30 天預計收入與支出。"],
+    assets: ["資產", "資產快照與投資部位。"],
+  };
+  const items = kind === "ledger" ? recent : kind === "planned" ? upcoming : assets;
+  workspace.innerHTML = `
+    ${pageHeading(pageMap[kind][0], pageMap[kind][1])}
+    <section class="metric-grid">
+      <div class="metric-card"><span>本月收入</span><strong>${formatCurrency(summary.month_income || 0)}</strong></div>
+      <div class="metric-card"><span>本月支出</span><strong>${formatCurrency(summary.month_expense || 0)}</strong></div>
+      <div class="metric-card"><span>本月淨流</span><strong>${formatCurrency(summary.month_net || 0)}</strong></div>
+      <div class="metric-card"><span>資產總額</span><strong>${formatCurrency(summary.asset_total || 0)}</strong></div>
+    </section>
+    <section class="panel list-panel">
+      ${items.length ? items.map((item) => rowCard(item, kind, [item.kind || item.category || "demo", formatCurrency(item.amount || 0), formatDate(item.date || item.due_at)])).join("") : `<p class="empty-note">公開展示資料目前沒有${pageMap[kind][0]}項目。</p>`}
+    </section>
+  `;
+}
+
+function renderSettings() {
+  workspace.innerHTML = `
+    ${pageHeading("設定", "公開展示版設定與資料狀態。")}
+    <section class="panel list-panel">
+      <div class="section-title"><span class="section-symbol">⚙</span><h2>Public Demo</h2></div>
+      <p class="muted-text">目前模式：唯讀。所有新增、刪除、同步、匯入操作都已停用。</p>
+      <p class="muted-text">資料來源：sanitized demo data，不包含私人 SwiftData store、本機備份或 Apple Calendar 資料。</p>
+    </section>
+  `;
+}
+
+function renderWorkspace() {
+  if (!state.dashboard) {
+    workspace.innerHTML = `${pageHeading("Life OS", "載入中...")}`;
+    return;
   }
-}
 
-function resetCashflowForm() {
-  cashflowForm.reset();
-  document.getElementById("cashflowKind").value = "expense";
-  document.getElementById("cashflowStatus").value = "actual";
-  setCashflowDateDefault();
-}
-
-async function refreshDashboard() {
-  const data = await fetchJSON("/api/dashboard");
-  renderAll(data);
-  setStatus(`上次更新：${data.snapshot.generated_at}`, "success");
-}
-
-async function loadCalendars() {
-  try {
-    const response = await fetchJSON("/api/calendars");
-    fillCalendarSelect(response.calendars);
-  } catch (error) {
-    if (appMode.readOnly) {
-      fillCalendarSelect([]);
-      setStatus("Public demo：Apple Calendar 已停用。", "neutral");
-      return;
-    }
-    throw error;
+  renderNav();
+  if (demoBanner) {
+    demoBanner.hidden = !state.dashboard.app_mode?.publicDemo;
   }
+  document.body.classList.toggle("is-read-only", Boolean(state.dashboard.app_mode?.readOnly));
+
+  if (state.section === "overview") renderOverview();
+  if (state.section === "tasks") renderTasks();
+  if (state.section === "projects") renderProjects();
+  if (state.section === "goals") renderGoals();
+  if (state.section === "calendar") renderCalendar();
+  if (["ledger", "planned", "assets"].includes(state.section)) renderCashflow(state.section);
+  if (state.section === "settings") renderSettings();
+
+  renderInspector();
+}
+
+function findSelected(kind, id) {
+  if (!kind || !id) return null;
+  if (kind === "task") return allTasks().find((item) => item.id === id);
+  if (kind === "project") return state.dashboard.projects?.find((item) => item.id === id);
+  if (kind === "goal") return state.dashboard.goals?.find((item) => item.id === id);
+  if (kind === "event") return allEvents().find((item) => item.id === id);
+  if (["ledger", "planned", "assets"].includes(kind)) {
+    const cashflow = state.dashboard.cashflow || {};
+    const pool = [...(cashflow.recent || []), ...(cashflow.upcoming || []), ...(cashflow.asset_positions || [])];
+    return pool.find((item) => item.id === id || item.title === id);
+  }
+  if (kind === "plan") {
+    const [dayIndex, itemIndex] = String(id).split("-").map(Number);
+    return state.replan?.plan_days?.[dayIndex]?.items?.[itemIndex];
+  }
+  return null;
+}
+
+function renderInspector() {
+  const selected = state.selected ? findSelected(state.selected.kind, state.selected.id) : null;
+  if (!selected) {
+    inspector.className = "inspector";
+    inspector.innerHTML = `
+      <div class="inspector-empty-icon" aria-hidden="true"></div>
+      <h2>檢查面板</h2>
+      <p>選一筆資料來檢視或編輯。</p>
+    `;
+    return;
+  }
+
+  inspector.className = "inspector is-filled";
+  const title = selected.title || "選取項目";
+  const fields = [
+    ["類型", state.selected.kind],
+    ["專案", selected.project_id ? projectName(selected.project_id) : "未指定"],
+    ["優先級", priorityLabel(selected.priority)],
+    ["截止", formatDateTime(selected.due_at || selected.deadline || selected.target_date)],
+    ["狀態", selected.status || selected.stage || "demo"],
+    ["摘要", selected.summary || selected.why || selected.reason || selected.time || "公開展示版僅供檢視"],
+  ];
+
+  inspector.innerHTML = `
+    <article class="inspector-card">
+      <h2>${escapeHTML(title)}</h2>
+      <div class="inspector-fields">
+        ${fields
+          .map(
+            ([label, value]) => `
+              <div class="field-row">
+                <span>${escapeHTML(label)}</span>
+                <span>${escapeHTML(value)}</span>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+      <div class="action-row">
+        <button class="action-button primary" type="button" disabled>Save</button>
+        <button class="action-button" type="button" disabled>Delete</button>
+      </div>
+      <p class="muted-text">Public Demo 是唯讀模式，這裡展示 inspector 結構，不寫入資料。</p>
+    </article>
+  `;
+}
+
+async function loadDashboard() {
+  const response = await fetch("/api/dashboard");
+  if (!response.ok) throw new Error(`Dashboard failed: ${response.status}`);
+  state.dashboard = await response.json();
 }
 
 async function loadReplan() {
-  const response = await fetchJSON("/api/replan-week");
-  renderReplan(response);
+  const response = await fetch("/api/replan-week");
+  if (!response.ok) throw new Error(`Replan failed: ${response.status}`);
+  state.replan = await response.json();
 }
 
-async function handleTaskSubmit(event) {
-  event.preventDefault();
-  const formData = new FormData(taskForm);
-
-  await fetchJSON("/api/tasks", {
-    method: "POST",
-    body: JSON.stringify({
-      title: formData.get("title"),
-      project_id: formData.get("project_id") || null,
-      due_at: formData.get("due_at") || null,
-      priority: formData.get("priority"),
-      estimate_minutes: Number(formData.get("estimate_minutes") || 60),
-      blocking: formData.get("blocking") === "on",
-    }),
-  });
-
-  taskForm.reset();
-  document.getElementById("taskPriority").value = "high";
-  document.getElementById("taskEstimate").value = 60;
-  await Promise.all([refreshDashboard(), loadReplan()]);
-  setStatus("任務已加入。", "success");
-}
-
-async function handleCaptureSubmit(event) {
-  event.preventDefault();
-  const formData = new FormData(captureForm);
-
-  const response = await fetchJSON("/api/capture", {
-    method: "POST",
-    body: JSON.stringify({ text: formData.get("text") }),
-  });
-
-  captureForm.reset();
-  await Promise.all([refreshDashboard(), loadReplan()]);
-  setStatus(`已快速匯入 ${response.created.length} 筆內容。`, "success");
-}
-
-async function handleEventSubmit(event) {
-  event.preventDefault();
-  const formData = new FormData(eventForm);
-
-  await fetchJSON("/api/events", {
-    method: "POST",
-    body: JSON.stringify({
-      title: formData.get("title"),
-      project_id: formData.get("project_id") || null,
-      start_at: formData.get("start_at"),
-      end_at: formData.get("end_at"),
-      location: formData.get("location") || "",
-      all_day: false,
-    }),
-  });
-
-  eventForm.reset();
-  await Promise.all([refreshDashboard(), loadReplan()]);
-  setStatus("事件已加入。", "success");
-}
-
-async function handleCashflowSubmit(event) {
-  event.preventDefault();
-  const formData = new FormData(cashflowForm);
-
-  await fetchJSON("/api/cashflow/entries", {
-    method: "POST",
-    body: JSON.stringify({
-      title: formData.get("title"),
-      kind: formData.get("kind"),
-      status: formData.get("status"),
-      amount: Number(formData.get("amount") || 0),
-      date: formData.get("date"),
-      category: formData.get("category"),
-      account: formData.get("account") || "",
-      note: formData.get("note") || "",
-      project_id: formData.get("project_id") || null,
-    }),
-  });
-
-  resetCashflowForm();
-  await refreshDashboard();
-  setStatus("現金流已加入。", "success");
-}
-
-async function handleTaskAction(button) {
-  await fetchJSON(`/api/tasks/${button.dataset.taskId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status: button.dataset.nextStatus }),
-  });
-  await Promise.all([refreshDashboard(), loadReplan()]);
-  setStatus("任務狀態已更新。", "success");
-}
-
-async function handleRequirementAction(button) {
-  await fetchJSON(`/api/requirements/${button.dataset.requirementId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status: button.dataset.nextStatus }),
-  });
-  await Promise.all([refreshDashboard(), loadReplan()]);
-  setStatus("前置條件狀態已更新。", "success");
-}
-
-async function handleTaskDelete(button) {
-  await fetchJSON(`/api/tasks/${button.dataset.taskDeleteId}`, { method: "DELETE" });
-  await Promise.all([refreshDashboard(), loadReplan()]);
-  setStatus("任務已刪除。", "success");
-}
-
-async function handleEventSync(button) {
-  const calendarName = calendarSelect.value;
-  if (!calendarName) {
-    throw new Error("沒有可用的 Apple Calendar");
-  }
-
-  await fetchJSON(`/api/events/${button.dataset.eventSyncId}/sync-apple`, {
-    method: "POST",
-    body: JSON.stringify({ calendar_name: calendarName }),
-  });
-  await Promise.all([refreshDashboard(), loadReplan()]);
-  setStatus(`事件已同步到 ${calendarName}。`, "success");
-}
-
-async function handleEventDelete(button) {
-  await fetchJSON(`/api/events/${button.dataset.eventDeleteId}`, { method: "DELETE" });
-  await Promise.all([refreshDashboard(), loadReplan()]);
-  setStatus("事件已刪除。", "success");
-}
-
-async function handleCashflowStatus(button) {
-  await fetchJSON(`/api/cashflow/entries/${button.dataset.cashflowId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status: button.dataset.cashflowNextStatus }),
-  });
-  await refreshDashboard();
-  setStatus("現金流狀態已更新。", "success");
-}
-
-async function handleCashflowDelete(button) {
-  await fetchJSON(`/api/cashflow/entries/${button.dataset.cashflowDeleteId}`, { method: "DELETE" });
-  await refreshDashboard();
-  setStatus("現金流已刪除。", "success");
-}
-
-async function handleCalendarImport() {
-  const calendarName = calendarSelect.value;
-  if (!calendarName) {
-    throw new Error("沒有可用的 Apple Calendar");
-  }
-
-  const response = await fetchJSON("/api/calendars/import", {
-    method: "POST",
-    body: JSON.stringify({
-      calendar_name: calendarName,
-      days_before: 7,
-      days_after: 30,
-    }),
-  });
-
-  await Promise.all([refreshDashboard(), loadReplan()]);
-  setStatus(
-    `已從 ${calendarName} 匯入 ${response.imported_count} 筆，更新 ${response.updated_count} 筆，清掉 ${response.removed_count} 筆舊事件。`,
-    "success"
-  );
-}
-
-async function handleReplan() {
-  await loadReplan();
-  setStatus("已重新分析本週。", "success");
-}
-
-document.addEventListener("click", async (event) => {
-  const paneButton = event.target.closest("[data-pane-button]");
-  if (paneButton) {
-    setActivePane(paneButton.dataset.paneButton);
-    return;
-  }
-
-  const taskButton = event.target.closest("[data-task-id]");
-  if (taskButton) {
-    try {
-      await handleTaskAction(taskButton);
-    } catch (error) {
-      console.error(error);
-      setStatus(`更新任務失敗：${error.message}`, "error");
-    }
-    return;
-  }
-
-  const taskDeleteButton = event.target.closest("[data-task-delete-id]");
-  if (taskDeleteButton) {
-    try {
-      await handleTaskDelete(taskDeleteButton);
-    } catch (error) {
-      console.error(error);
-      setStatus(`刪除任務失敗：${error.message}`, "error");
-    }
-    return;
-  }
-
-  const requirementButton = event.target.closest("[data-requirement-id]");
-  if (requirementButton) {
-    try {
-      await handleRequirementAction(requirementButton);
-    } catch (error) {
-      console.error(error);
-      setStatus(`更新前置條件失敗：${error.message}`, "error");
-    }
-    return;
-  }
-
-  const eventSyncButton = event.target.closest("[data-event-sync-id]");
-  if (eventSyncButton) {
-    try {
-      await handleEventSync(eventSyncButton);
-    } catch (error) {
-      console.error(error);
-      setStatus(`同步 Apple Calendar 失敗：${error.message}`, "error");
-    }
-    return;
-  }
-
-  const eventDeleteButton = event.target.closest("[data-event-delete-id]");
-  if (eventDeleteButton) {
-    try {
-      await handleEventDelete(eventDeleteButton);
-    } catch (error) {
-      console.error(error);
-      setStatus(`刪除事件失敗：${error.message}`, "error");
-    }
-    return;
-  }
-
-  const cashflowButton = event.target.closest("[data-cashflow-id]");
-  if (cashflowButton) {
-    try {
-      await handleCashflowStatus(cashflowButton);
-    } catch (error) {
-      console.error(error);
-      setStatus(`更新現金流失敗：${error.message}`, "error");
-    }
-    return;
-  }
-
-  const cashflowDeleteButton = event.target.closest("[data-cashflow-delete-id]");
-  if (cashflowDeleteButton) {
-    try {
-      await handleCashflowDelete(cashflowDeleteButton);
-    } catch (error) {
-      console.error(error);
-      setStatus(`刪除現金流失敗：${error.message}`, "error");
-    }
-  }
-});
-
-taskForm.addEventListener("submit", async (event) => {
+async function init() {
+  renderNav();
+  renderInspector();
+  workspace.innerHTML = `${pageHeading("Life OS", "載入中...")}`;
   try {
-    await handleTaskSubmit(event);
+    await Promise.all([loadDashboard(), loadReplan()]);
+    renderWorkspace();
   } catch (error) {
-    console.error(error);
-    setStatus(`新增任務失敗：${error.message}`, "error");
+    workspace.innerHTML = `${pageHeading("Life OS", "載入失敗")}
+      <section class="panel list-panel"><p class="empty-note">${escapeHTML(error.message)}</p></section>`;
   }
+}
+
+sidebarNav.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-nav]");
+  if (!button) return;
+  state.section = button.dataset.nav;
+  state.selected = null;
+  renderWorkspace();
 });
 
-captureForm.addEventListener("submit", async (event) => {
-  try {
-    await handleCaptureSubmit(event);
-  } catch (error) {
-    console.error(error);
-    setStatus(`快速匯入失敗：${error.message}`, "error");
+workspace.addEventListener("click", async (event) => {
+  const generate = event.target.closest("#generatePlanButton");
+  if (generate) {
+    generate.textContent = "產生中...";
+    await loadReplan();
+    renderWorkspace();
+    return;
   }
+
+  const selectButton = event.target.closest("[data-select-button]");
+  const card = event.target.closest("[data-select]");
+  const target = selectButton || card;
+  if (!target) return;
+  state.selected = { kind: target.dataset.selectButton || target.dataset.select, id: target.dataset.id };
+  renderInspector();
 });
 
-eventForm.addEventListener("submit", async (event) => {
-  try {
-    await handleEventSubmit(event);
-  } catch (error) {
-    console.error(error);
-    setStatus(`新增事件失敗：${error.message}`, "error");
-  }
+searchInput.addEventListener("input", (event) => {
+  state.search = event.target.value;
+  renderWorkspace();
 });
 
-cashflowForm.addEventListener("submit", async (event) => {
-  try {
-    await handleCashflowSubmit(event);
-  } catch (error) {
-    console.error(error);
-    setStatus(`新增現金流失敗：${error.message}`, "error");
-  }
-});
-
-importCalendarButton.addEventListener("click", async () => {
-  try {
-    await handleCalendarImport();
-  } catch (error) {
-    console.error(error);
-    setStatus(`匯入 Apple Calendar 失敗：${error.message}`, "error");
-  }
-});
-
-replanButton.addEventListener("click", async () => {
-  try {
-    await handleReplan();
-  } catch (error) {
-    console.error(error);
-    setStatus(`重排本週失敗：${error.message}`, "error");
-  }
-});
-
-refreshDashboard()
-  .then(() => Promise.all([loadCalendars(), loadReplan()]))
-  .then(() => {
-    setActivePane("capture");
-    setCashflowDateDefault();
-  })
-  .catch((error) => {
-    console.error(error);
-    setStatus(`載入失敗：${error.message}`, "error");
+document.querySelectorAll("[data-disabled-action]").forEach((button) => {
+  button.addEventListener("click", () => {
+    state.selected = null;
+    renderInspector();
   });
+});
+
+init();
