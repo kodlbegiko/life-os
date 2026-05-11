@@ -16,6 +16,7 @@ const state = {
   replan: null,
   selected: null,
   search: "",
+  inspectorOpen: false,
 };
 
 const sidebarNav = document.getElementById("sidebarNav");
@@ -23,6 +24,8 @@ const workspace = document.getElementById("workspace");
 const inspector = document.getElementById("inspector");
 const demoBanner = document.getElementById("demoBanner");
 const searchInput = document.getElementById("workspaceSearch");
+const desktopFrame = document.querySelector(".desktop-frame");
+const inspectorToggle = document.getElementById("inspectorToggle");
 
 function escapeHTML(value = "") {
   return String(value)
@@ -384,6 +387,7 @@ function renderWorkspace() {
   if (state.section === "settings") renderSettings();
 
   renderInspector();
+  syncInspectorState();
 }
 
 function findSelected(kind, id) {
@@ -429,7 +433,10 @@ function renderInspector() {
 
   inspector.innerHTML = `
     <article class="inspector-card">
-      <h2>${escapeHTML(title)}</h2>
+      <div class="inspector-card-head">
+        <h2>${escapeHTML(title)}</h2>
+        <button class="inspector-close" type="button" data-close-inspector aria-label="關閉檢查面板">×</button>
+      </div>
       <div class="inspector-fields">
         ${fields
           .map(
@@ -449,6 +456,14 @@ function renderInspector() {
       <p class="muted-text">Public Demo 是唯讀模式，這裡展示 inspector 結構，不寫入資料。</p>
     </article>
   `;
+}
+
+function syncInspectorState() {
+  desktopFrame?.classList.toggle("is-inspector-open", state.inspectorOpen);
+  if (inspectorToggle) {
+    inspectorToggle.setAttribute("aria-expanded", String(state.inspectorOpen));
+    inspectorToggle.classList.toggle("is-active", state.inspectorOpen);
+  }
 }
 
 async function loadDashboard() {
@@ -481,6 +496,7 @@ sidebarNav.addEventListener("click", (event) => {
   if (!button) return;
   state.section = button.dataset.nav;
   state.selected = null;
+  state.inspectorOpen = false;
   renderWorkspace();
 });
 
@@ -498,7 +514,9 @@ workspace.addEventListener("click", async (event) => {
   const target = selectButton || card;
   if (!target) return;
   state.selected = { kind: target.dataset.selectButton || target.dataset.select, id: target.dataset.id };
+  state.inspectorOpen = true;
   renderInspector();
+  syncInspectorState();
 });
 
 searchInput.addEventListener("input", (event) => {
@@ -510,7 +528,20 @@ document.querySelectorAll("[data-disabled-action]").forEach((button) => {
   button.addEventListener("click", () => {
     state.selected = null;
     renderInspector();
+    syncInspectorState();
   });
+});
+
+inspectorToggle?.addEventListener("click", () => {
+  state.inspectorOpen = !state.inspectorOpen;
+  renderInspector();
+  syncInspectorState();
+});
+
+inspector.addEventListener("click", (event) => {
+  if (!event.target.closest("[data-close-inspector]")) return;
+  state.inspectorOpen = false;
+  syncInspectorState();
 });
 
 init();
